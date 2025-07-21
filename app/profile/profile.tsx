@@ -13,6 +13,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth, useUser } from "@clerk/clerk-expo";
+import { clearAuthToken } from "../../utils/authToken"; // ✅ Add this at the top with other imports
+
 
 const { width } = Dimensions.get("window");
 
@@ -227,13 +229,24 @@ const Profile: React.FC = () => {
           <TouchableOpacity style={styles.menuItem}>
             <Text style={styles.menuItemText}>Danger Zone</Text>
           </TouchableOpacity>
+<TouchableOpacity
+  style={styles.menuItem}
+  onPress={async () => {
+    try {
+      await clearAuthToken();         // ✅ Clear token
+      await signOut();                // ✅ Clerk sign out
+      router.replace("/");            // ✅ Navigate to login/root
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
+  }}
+>
+  <Text style={styles.menuItemText}>Log Out</Text>
+  <View style={styles.logoutIcon}>
+    <Text style={styles.iconText}>→</Text>
+  </View>
+</TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem}  onPress={async () => await signOut()}>
-            <Text style={styles.menuItemText}>Log Out</Text>
-            <View style={styles.logoutIcon}>
-              <Text style={styles.iconText}>→</Text>
-            </View>
-          </TouchableOpacity>
 
           <TouchableOpacity style={styles.deleteAccount}>
             <Text style={styles.deleteAccountText}>Delete Account</Text>

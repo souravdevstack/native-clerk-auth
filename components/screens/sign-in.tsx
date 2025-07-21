@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import * as WebBrowser from "expo-web-browser";
 import * as AuthSession from "expo-auth-session";
 import { useAuth, useSSO, useUser } from "@clerk/clerk-expo";
@@ -9,11 +9,13 @@ import {
   Text,
   Image,
   useWindowDimensions,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { base_url} from "@/config/url";
-import { saveAuthToken } from "@/utils/authToken";
+import { base_url } from "@/config/url";
+import { saveAuthToken, getAuthToken } from "@/utils/authToken";
+import Toast from "react-native-toast-message";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -28,18 +30,28 @@ export const useWarmUpBrowser = () => {
 
 export default function Page() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
+
   useWarmUpBrowser();
 
   const { startSSOFlow } = useSSO();
   const { isSignedIn, userId } = useAuth();
   const { user } = useUser();
-  const { width } = useWindowDimensions();
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadingStrategy, setLoadingStrategy] = useState<null | "oauth_google" | "oauth_apple">(null);
+  const [showContent, setShowContent] = useState(false); // <-- control rendering
 
   const handleLogin = useCallback(
-    async (strategy: "oauth_google" | "oauth_facebook" | "oauth_apple") => {
+    async (strategy: "oauth_google" | "oauth_apple") => {
+      if (isLoading) return;
+
       try {
+        setIsLoading(true);
+        setLoadingStrategy(strategy);
+
         const redirectUrl = AuthSession.makeRedirectUri({
-          native: "your.app.scheme://redirect",
+          native: "bbbj://redirect",
         });
 
         const { createdSessionId, setActive } = await startSSOFlow({
@@ -47,67 +59,104 @@ export default function Page() {
           redirectUrl,
         });
 
-        if (createdSessionId) {
-          await setActive?.({ session: createdSessionId });
+        if (createdSessionId && setActive) {
+          await setActive({ session: createdSessionId });
         }
       } catch (err) {
-        console.error("SSO error:", JSON.stringify(err, null, 2));
+        console.error("SSO error:", err);
+        Toast.show({
+          type: "error",
+          text1: "SSO Error",
+          text2: "Something went wrong during sign-in.",
+        });
+      } finally {
+        setIsLoading(false);
+        setLoadingStrategy(null);
       }
     },
-    [startSSOFlow]
+    [startSSOFlow, isLoading]
   );
 
   useEffect(() => {
-    const handleSignIn = async () => {
-  const endpoint="/signin/user"
-      if (isSignedIn) {
-        console.log(user?.imageUrl)
-        console.log(userId)
-        console.log("User is signed in"); //for checking user is signed in or not
-        console.log("User email:", user?.emailAddresses[0].emailAddress); //for checking user mail
-        console.log("User fullname:", user?.fullName); //for checking user full name
-        console.log("your provider:", user?.externalAccounts?.[0]?.provider); //for checking user provider either google or apple
-        router.push("/signup/signUp");
+    const checkAuthAndSignIn = async () => {
+      const existingToken = await getAuthToken();
 
-        try {
-          console.log("full api", base_url+endpoint)
-          const response = await fetch(`${base_url}${endpoint}`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
+      if (existingToken) {
+        // Token exists → redirect immediately
+        Toast.show({
+          type: "success",
+          text1: "Already Signed In",
+          text2: "Redirecting...",
+        });
+        router.replace("/(tabs)");
+        return;
+      }
+
+      // No token, but Clerk session might exist → proceed
+      if (!isSignedIn || !userId || !user) {
+        setShowContent(true); // Show login UI
+        return;
+      }
+
+      try {
+        const response = await fetch(`${base_url}/signin/user`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            fullName: user.fullName,
+            email: user.emailAddresses[0].emailAddress,
+            imageUrl: user.imageUrl,
+            providerInfo: {
+              providerName: user.externalAccounts?.[0]?.provider,
+              providerId: userId,
             },
-            body: JSON.stringify({
-              fullName: user?.fullName,
-              email: user?.emailAddresses[0].emailAddress,
-              imageUrl:user?.imageUrl,
-              providerInfo:{
-                providerName: user?.externalAccounts?.[0]?.provider,
-                providerId:userId
-              }
-            }),
+          }),
+        });
+
+        const data = await response.json();
+        const token = data?.data?.token;
+
+        if (response.status === 201 && token) {
+          await saveAuthToken(token);
+
+          Toast.show({
+            type: "success",
+            text1: "Login Successful",
+            text2: "Redirecting...",
           });
 
-          const data = await response.json();
-          console.log("Response status:", response); //for checking response status
-          console.log("Response body:", data); //for checking response body
-          const token = data.data?.token;
-
-          if (response.status === 201 && token) {
-            // console.log("token stored"); //for checking token is stored or not
-            await saveAuthToken(token);
-          } else {
-            // console.log("token not stored"); //for checking token is stored or not
-          }
-        } catch (error) {
-          console.error("Sign-in request failed:", error);
+          router.replace("/signup/signUp");
+        } else {
+          Toast.show({
+            type: "error",
+            text1: "Login Failed",
+            text2: data?.message || "Could not authenticate user.",
+          });
         }
-      } else {
-        console.log("User is not signed in");
+      } catch (error) {
+        console.error("Sign-in request failed:", error);
+        Toast.show({
+          type: "error",
+          text1: "Server Error",
+          text2: "Could not connect to server.",
+        });
+      } finally {
+        setShowContent(true); // Show login UI if user not redirected
       }
     };
 
-    handleSignIn();
-  }, [isSignedIn, router, user, userId]);
+    checkAuthAndSignIn();
+  }, [isSignedIn, userId, user]);
+
+  if (!showContent) {
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#3BA365" />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.scrollContainer}>
@@ -121,33 +170,56 @@ export default function Page() {
 
           <Image
             source={require("@/assets/images/logn_image.png")}
-            style={[
-              styles.loginImage,
-              { width: width * 0.8, height: width * 0.8 },
-            ]}
+            style={[styles.loginImage, { width: width * 0.8, height: width * 0.8 }]}
             resizeMode="contain"
           />
 
+          {/* Google Button */}
           <TouchableOpacity
-            style={[styles.button, { width: width * 0.85 }]}
+            style={[
+              styles.button,
+              {
+                backgroundColor:
+                  loadingStrategy === "oauth_google" ? "#A1E6B4" : "#004110",
+                width: width * 0.85,
+              },
+            ]}
             onPress={() => handleLogin("oauth_google")}
+            disabled={isLoading}
           >
             <Image
               source={require("@/assets/images/logo_google.png")}
               style={styles.logo}
             />
-            <Text style={styles.buttonText}>Continue with Google</Text>
+            <Text style={styles.buttonText}>
+              {loadingStrategy === "oauth_google"
+                ? "Signing in..."
+                : "Continue with Google"}
+            </Text>
           </TouchableOpacity>
 
+          {/* Apple Button */}
           <TouchableOpacity
-            style={[styles.button, { width: width * 0.85 }]}
+            style={[
+              styles.button,
+              {
+                backgroundColor:
+                  loadingStrategy === "oauth_apple" ? "#A1E6B4" : "#004110",
+                width: width * 0.85,
+              },
+            ]}
             onPress={() => handleLogin("oauth_apple")}
+            disabled={isLoading}
           >
             <Image
               source={require("@/assets/images/logo_apple.png")}
               style={styles.logo}
             />
-            <Text style={styles.buttonText}>Continue with Apple</Text>
+            <Text style={styles.buttonText}>
+              {loadingStrategy === "oauth_apple"
+                ? "Signing in..."
+                : "Continue with Apple"}
+            </Text>
           </TouchableOpacity>
 
           <Text style={styles.endText}>
@@ -172,6 +244,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     alignItems: "center",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#fff",
   },
   textWrapper: {
     marginBottom: 20,
@@ -198,7 +276,6 @@ const styles = StyleSheet.create({
   button: {
     marginTop: 15,
     flexDirection: "row",
-    backgroundColor: "#004110",
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 9999,
