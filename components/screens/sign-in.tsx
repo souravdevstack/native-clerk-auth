@@ -44,8 +44,7 @@ export default function Page() {
 
   const handleLogin = useCallback(
     async (strategy: "oauth_google" | "oauth_apple") => {
-      if (isLoading) return;
-
+      if (isLoading || isSignedIn) return; // <-- prevent login if already signed in
       try {
         setIsLoading(true);
         setLoadingStrategy(strategy);
@@ -67,7 +66,7 @@ export default function Page() {
         Toast.show({
           type: "error",
           text1: "SSO Error",
-          text2: "Something went wrong during sign-in.",
+          text2: err?.toString()||"Something went wrong during sign-in.",
         });
       } finally {
         setIsLoading(false);
@@ -140,7 +139,7 @@ export default function Page() {
         Toast.show({
           type: "error",
           text1: "Server Error",
-          text2: "Could not connect to server.",
+          text2: error?.toString() || "Could not connect to server.",
         });
       } finally {
         setShowContent(true); // Show login UI if user not redirected
