@@ -1,11 +1,11 @@
 import React, { useEffect } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
   Dimensions,
-  StatusBar,
   Image,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 
 interface SplashScreenProps {
@@ -30,7 +30,7 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onSplashComplete }) => {
         style={{ width: 80, height: 80, marginBottom: 15 }}
       />
       <StatusBar barStyle="light-content"/>
-      <Text style={styles.title}>Good Breach</Text>
+      <Text style={styles.title}>Buck UP</Text>
     </View>
   );
 };

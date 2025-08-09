@@ -7,6 +7,7 @@ import {
   Dimensions,
   ActivityIndicator,
   FlatList,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import React, { useState, useEffect } from "react";
@@ -16,6 +17,9 @@ import { getAuthToken } from "@/utils/authToken";
 import { base_url } from "@/config/url";
 import { useIsFocused } from "@react-navigation/native";
 import { ActiveGoalsList } from "@/components/ActiveGoals/ActiveGoalList";
+import * as Notifications from "expo-notifications";
+import Constants from "expo-constants";
+import axios from "axios";
 
 const { width, height } = Dimensions.get("window");
 const wp = (percentage: any) => (width * percentage) / 100;
@@ -28,6 +32,62 @@ export default function Index() {
   const isFocused = useIsFocused();
   const endpoint = "/goals/user";
 
+  // 📌 Check notification permission + send device token
+  useEffect(() => {
+    const registerForPushNotifications = async () => {
+      try {
+        const token = await getAuthToken("user");
+        if (!token) {
+          console.warn("User not logged in, skipping device token update");
+          return;
+        }
+
+        let deviceToken = "";
+
+        const { status: existingStatus } =
+          await Notifications.getPermissionsAsync();
+        let finalStatus = existingStatus;
+
+        if (existingStatus !== "granted") {
+          const { status } = await Notifications.requestPermissionsAsync();
+          finalStatus = status;
+        }
+
+        if (finalStatus === "granted") {
+          const pushToken = await Notifications.getExpoPushTokenAsync({
+            projectId: Constants.expoConfig?.extra?.eas?.projectId,
+          });
+          deviceToken = pushToken.data;
+        }
+
+        // 📤 Send token (or empty string) to backend
+
+        const formData = new FormData();
+        const isActive = true;
+
+        formData.append("isActive", String(isActive));
+        // formData.append("preferences[pushNotification]", true);
+        formData.append("deviceToken", deviceToken);
+
+        const response = await axios.patch(`${base_url}/api/create/user`, formData, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (response) {
+          console.log(response)
+        }
+        console.log("Device token updated:", deviceToken || "empty");
+      } catch (err) {
+        console.error("Error updating device token:", err);
+      }
+    };
+
+    registerForPushNotifications();
+  }, []);
+
+  // 📌 Fetch active goals
   useEffect(() => {
     const fetchGoals = async () => {
       try {
@@ -48,15 +108,12 @@ export default function Index() {
         });
 
         const data = await response.json();
-        console.log("Parsed response data:", data);
-
         if (response?.status === 201 && Array.isArray(data?.data?.data)) {
           const activeGoals = data.data.data.filter(
             (goal: any) => goal.status === "active"
           );
           setGoals(activeGoals);
         } else {
-          console.log("No valid goals data");
           setGoals([]);
         }
       } catch (error: any) {
@@ -70,16 +127,16 @@ export default function Index() {
     if (isFocused) fetchGoals();
   }, [isFocused]);
 
+  // 🔹 The rest of your renderHeader, renderFooter, styles remain unchanged
   const renderHeader = () => (
     <>
-      {/* Header */}
       <View style={styles.container}>
         <View style={styles.headerLeft}>
           <Image
             source={require("@/assets/images/splash_icon.png")}
             style={styles.headerLeftIcon}
           />
-          <Text style={styles.headerText}>GoodBreach</Text>
+          <Text style={styles.headerText}>BuckUp</Text>
         </View>
         <View style={styles.headerRight}>
           <TouchableOpacity style={styles.iconButton}>
@@ -100,9 +157,7 @@ export default function Index() {
           </TouchableOpacity>
         </View>
       </View>
-
       <View style={styles.Card}>
-        {/* Savings Card */}
         <View style={styles.savingsCard}>
           <View style={styles.savingsRow}>
             <View>
@@ -122,8 +177,6 @@ export default function Index() {
             ))}
           </View>
         </View>
-
-        {/* Active Goals Title */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Active Goals</Text>
@@ -136,7 +189,7 @@ export default function Index() {
   const renderFooter = () => (
     <>
       <View style={styles.Card}>
-        {/* Challenges Section */}
+        {/* Active Challenges */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Active Challenges</Text>
@@ -146,7 +199,6 @@ export default function Index() {
               <Text style={styles.seeAll}>See All</Text>
             </TouchableOpacity>
           </View>
-
           <View style={styles.challengeRow}>
             {[
               {
@@ -170,25 +222,6 @@ export default function Index() {
                 </Text>
               </View>
             ))}
-          </View>
-        </View>
-
-        {/* Impact Card */}
-        <View style={styles.impactCard}>
-          <View style={styles.impactTop}>
-            <View>
-              <Text style={styles.impactAmount}>£1,605</Text>
-              <Text style={styles.impactLabel}>Potential yearly savings</Text>
-            </View>
-            <View>
-              <Text style={styles.impactPercent}>68%</Text>
-              <Text style={styles.impactLabel}>Success rate</Text>
-            </View>
-          </View>
-          <View style={styles.impactList}>
-            <Text>✅ Avoided 18 sugary drinks</Text>
-            <Text>✅ Added 5,000+ steps weekly</Text>
-            <Text>✅ Reduced caffeine by 20%</Text>
           </View>
         </View>
       </View>
@@ -222,6 +255,7 @@ export default function Index() {
     </SafeAreaView>
   );
 }
+
 
 const styles = StyleSheet.create({
   safeContainer: {

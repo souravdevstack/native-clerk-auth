@@ -8,10 +8,14 @@ import {
   Dimensions,
   SafeAreaView,
   StatusBar,
+  Platform,
 } from 'react-native';
 import { onboardingData } from '@/utils/onBoardingData';
 import { setOnboardingCompleted } from '@/utils/asyncStorage';
 import { Ionicons } from '@expo/vector-icons';
+import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface OnboardingScreenProps {
   onOnboardingComplete: () => void;
@@ -35,8 +39,44 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onOnboardingComplet
   };
 
   const handleComplete = async () => {
+    // Ask notification permission when onboarding completes
+    await requestNotificationPermission();
     await setOnboardingCompleted();
     onOnboardingComplete();
+  };
+
+  const requestNotificationPermission = async () => {
+    try {
+      if (!Device.isDevice) {
+        console.log("Must use physical device for Push Notifications");
+        return;
+      }
+
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+
+      if (finalStatus !== 'granted') {
+        console.log("Notification permission not granted");
+        return;
+      }
+
+      const tokenData = await Notifications.getExpoPushTokenAsync({
+        projectId: 'YOUR_EXPO_PROJECT_ID', // replace with your actual Expo project ID
+      });
+      const deviceToken = tokenData.data;
+      console.log("Device Token:", deviceToken);
+
+      // Save token locally for later comparison
+      await AsyncStorage.setItem('deviceToken', deviceToken);
+
+    } catch (error) {
+      console.error("Error getting push notification token:", error);
+    }
   };
 
   const currentData = onboardingData[currentIndex];
@@ -97,124 +137,24 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onOnboardingComplet
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-  },
-  imageSection: {
-    height: height * 0.55, // Takes about 55% of screen height
-    width: width,
-  },
-  image: {
-    width: width,
-    height: '100%',
-  },
-  contentSection: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: height * 0.04,
-  },
-  textContainer: {
-    alignItems: 'center',
-    width: 280, // Slightly narrower to force proper text wrapping
-    paddingHorizontal: 10,
-  },
-  title: {
-    fontSize: 26, // Slightly smaller for better wrapping
-    fontWeight: '800',
-    color: '#1a1a1a',
-    textAlign: 'center',
-    marginBottom: 12,
-    lineHeight: 32,
-  },
-  subtitle: {
-    fontSize: 15, // Slightly smaller for 3-line wrapping
-    color: '#666666',
-    textAlign: 'center',
-    lineHeight: 20,
-    fontWeight: '400',
-  },
-  pagination: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dot: {
-    marginHorizontal: 6,
-    borderRadius: 8,
-  },
-  activeDot: {
-    width: 24,
-    height: 8,
-    backgroundColor: '#6366f1',
-  },
-  inactiveDot: {
-    width: 8,
-    height: 8,
-    backgroundColor: '#e5e7eb',
-  },
-  buttonSection: {
-    width: '100%',
-    paddingHorizontal: 24,
-    paddingBottom: 20,
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    width: '100%',
-  },
-  skipButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  skipText: {
-    fontSize: 16,
-    color: '#9ca3af',
-    fontWeight: '500',
-  },
-  nextButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#6366f1',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#6366f1',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  nextArrow: {
-    fontSize: 20,
-    color: '#ffffff',
-    fontWeight: 'bold',
-  },
-  getStartedButton: {
-    backgroundColor: '#6366f1',
-    paddingHorizontal: 48,
-    paddingVertical: 16,
-    borderRadius: 28,
-    alignSelf: 'center',
-    shadowColor: '#6366f1',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  getStartedText: {
-    fontSize: 16,
-    color: '#ffffff',
-    fontWeight: '600',
-  },
+  container: { flex: 1, backgroundColor: '#ffffff' },
+  imageSection: { height: height * 0.55, width: width },
+  image: { width: width, height: '100%' },
+  contentSection: { flex: 1, alignItems: 'center', justifyContent: 'space-between', paddingVertical: height * 0.04 },
+  textContainer: { alignItems: 'center', width: 280, paddingHorizontal: 10 },
+  title: { fontSize: 26, fontWeight: '800', color: '#1a1a1a', textAlign: 'center', marginBottom: 12, lineHeight: 32 },
+  subtitle: { fontSize: 15, color: '#666666', textAlign: 'center', lineHeight: 20, fontWeight: '400' },
+  pagination: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  dot: { marginHorizontal: 6, borderRadius: 8 },
+  activeDot: { width: 24, height: 8, backgroundColor: '#6366f1' },
+  inactiveDot: { width: 8, height: 8, backgroundColor: '#e5e7eb' },
+  buttonSection: { width: '100%', paddingHorizontal: 24, paddingBottom: 20 },
+  buttonRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%' },
+  skipButton: { paddingHorizontal: 16, paddingVertical: 12 },
+  skipText: { fontSize: 16, color: '#9ca3af', fontWeight: '500' },
+  nextButton: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#6366f1', justifyContent: 'center', alignItems: 'center', shadowColor: '#6366f1', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 8 },
+  getStartedButton: { backgroundColor: '#6366f1', paddingHorizontal: 48, paddingVertical: 16, borderRadius: 28, alignSelf: 'center', shadowColor: '#6366f1', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 8 },
+  getStartedText: { fontSize: 16, color: '#ffffff', fontWeight: '600' },
 });
 
 export default OnboardingScreen;

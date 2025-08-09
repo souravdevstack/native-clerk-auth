@@ -1,16 +1,21 @@
 {
   "expo": {
-    "name": "GoodBreach",
+    "name": "BuckUp",
     "slug": "bbbj",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
-    "platforms": ["android", "ios"],
+    "platforms": [
+      "android",
+      "ios"
+    ],
     "owner": "souravsharma05",
     "icon": "./assets/images/icon.png",
     "scheme": "bbbj",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
+      "buildNumber": "5",
+      "supportsTablet": false,
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": false,
@@ -21,17 +26,19 @@
               "NSExceptionMinimumTLSVersion": "TLSv1.1"
             }
           }
-        }
-      }
+        },
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "com.buckup.buckup"
     },
     "android": {
-      "versionCode": 11,
+      "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.goodbreach.goodbreach"
+      "package": "com.buckup.buckup"
     },
     "web": {
       "bundler": "metro",

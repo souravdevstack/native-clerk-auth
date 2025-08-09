@@ -1,223 +1,364 @@
-import { useRouter } from "expo-router";
-import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  Modal,
-  FlatList,
+  ScrollView,
+  Dimensions,
 } from "react-native";
-import Icon from "react-native-vector-icons/Ionicons";
+import React, { useEffect, useState } from "react";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { useLocalSearchParams, router } from "expo-router";
+import { goalImageMap } from "@/components/ActiveGoals/goalsMap";
 import { base_url } from "@/config/url";
 import { getAuthToken } from "@/utils/authToken";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
+import { useCallback } from "react";
 
-const GoalPreview = () => {
-  const router = useRouter();
-  const [showOptions, setShowOptions] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [goals, setGoals] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedGoal, setSelectedGoal] = useState<any | null>(null);
 
-  const history = [
-    { id: "1", title: "Skip Coffee", date: "Today", amount: 20 },
-    { id: "2", title: "Deposit", date: "Today", amount: 10 },
-    { id: "3", title: "Public Transport", date: "Yesterday", amount: 20 },
-    { id: "4", title: "Deposit", date: "24-06-2025", amount: 40 },
-  ];
+interface GoalTransaction {
+  id: string;
+  title: string;
+  type: string;
+  timestamp: number;
+  amount: number;
+  date: string;
+  // Add any other properties you expect
+}
+interface SavingMethod {
+  id: string;
+  method: string;
+  amount?: number;
+}
 
-  const deleteGoal = () => {
-    setModalVisible(false);
-    // TODO: Call backend delete API
-    alert("Goal deleted");
-  };
+const { width, height } = Dimensions.get("window");
+const wp = (percentage: number) => (width * percentage) / 100;
+const hp = (percentage: number) => (height * percentage) / 100;
 
-  useEffect(() => {
-    const fetchGoals = async () => {
-      try {
-        const token = await getAuthToken("user");
-        const response = await fetch(`${base_url}/goals/user`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        });
+const methodIcons: Record<string, keyof typeof Ionicons.glyphMap> = {
+  Sacrifice: "wallet-outline",
+  RoundUp: "cash-outline",
+  DailyPocket: "calendar-outline",
+  // fallback: use "help-circle-outline"
+};
 
-        const data = await response.json();
-        const activeGoals = Array.isArray(data?.data?.data)
-          ? data.data.data.filter((g: any) => g.status === "active").reverse()
-          : [];
-
-        setGoals(activeGoals);
-        setSelectedGoal(activeGoals[0] ?? null);
-      } catch (error) {
-        console.error("Error fetching goals:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchGoals();
-  }, []);
-
-//   const getProgressPercent = () => {
-//     if (!selectedGoal) return "0%";
-//     const { savedAmount = 0, goalAmount = 1 } = selectedGoal;
-//     const percent = Math.min((savedAmount / goalAmount) * 100, 100);
-//     return `${percent}%`;
-//   };
-
-  return (
-    <SafeAreaView style={{ flex: 1 }}>
-      <View style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.goalTitle}>
-            {selectedGoal ? selectedGoal.goalName : "Loading..."}
-          </Text>
-          <TouchableOpacity onPress={() => setShowOptions(!showOptions)}>
-            <Icon name="ellipsis-vertical" size={24} />
-          </TouchableOpacity>
-          {showOptions && (
-            <TouchableOpacity
-              onPress={() => setModalVisible(true)}
-              style={styles.optionBox}
-            >
-              <Text style={{ color: "red" }}>Delete</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Goal Info */}
-        {selectedGoal && (
-          <>
-            <Text style={styles.onTrack}>✔️ On Track</Text>
-            <Text style={styles.daysLeft}>
-              Days Left: {selectedGoal.daysLeft ?? "..."}
-            </Text>
-
-            <View style={styles.progressBar}>
-              <View
-                style={[styles.progressFill, ]}
-              />
-            </View>
-
-            <Text>Saved: £{selectedGoal.savedAmount ?? 0}</Text>
-            <Text>Goal: £{selectedGoal.goalAmount ?? 0}</Text>
-
-            {/* Saving Methods */}
-            <Text style={styles.sectionTitle}>Selected Saving Methods</Text>
-            <View style={styles.method}>
-              <Text>💰 Sacrifice & Save</Text>
-            </View>
-            <View style={styles.method}>
-              <Text>🪙 Daily Pocket Change</Text>
-            </View>
-          </>
-        )}
-
-        {/* History */}
-        <Text style={styles.sectionTitle}>Saving History</Text>
-        <FlatList
-          data={history}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <View style={styles.historyItem}>
-              <Text>{item.title}</Text>
-              <Text style={{ fontWeight: "bold" }}>£{item.amount}</Text>
-            </View>
-          )}
-        />
-
-        {/* Actions */}
-        <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.outlinedBtn}>
-            <Text>Complete Goal</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.outlinedBtn}
-            onPress={() => router.push("/previewGoal/deposit")}
-          >
-            <Text>Deposit</Text>
-          </TouchableOpacity>
-        </View>
-
-        <TouchableOpacity
-          style={styles.greenBtn}
-          onPress={() => router.push("/previewGoal/withdraw")}
-        >
-          <Text style={styles.greenBtnText}>Withdraw</Text>
-        </TouchableOpacity>
-
-        {/* Delete Modal */}
-        <Modal visible={modalVisible} transparent animationType="fade">
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalBox}>
-              <Text style={{ fontWeight: "bold", fontSize: 16 }}>
-                You are going to delete your Goal.
-              </Text>
-              <Text style={{ marginVertical: 10, color: "gray" }}>
-                You won’t be able to restore your data
-              </Text>
-              <View style={styles.modalButtons}>
-                <TouchableOpacity
-                  style={styles.cancelBtn}
-                  onPress={() => setModalVisible(false)}
-                >
-                  <Text>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.deleteBtn}
-                  onPress={deleteGoal}
-                >
-                  <Text style={{ color: "white" }}>Delete</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
-      </View>
-    </SafeAreaView>
+const groupTransactionsByDate = (transactions: GoalTransaction[]) => {
+  return transactions.reduce(
+    (acc: Record<string, GoalTransaction[]>, transaction) => {
+      const date = new Date(transaction.timestamp).toLocaleDateString("en-GB");
+      if (!acc[date]) acc[date] = [];
+      acc[date].push(transaction);
+      return acc;
+    },
+    {}
   );
 };
 
-export default GoalPreview;
+const PreviewGoal = () => {
+  const { goal } = useLocalSearchParams();
+  //goal data fetched from active goal list
+  const selectedGoal = goal ? JSON.parse(goal as string) : null;
+  // console.log("GoalId", selectedGoal.id);
+  // console.log("GoalData", selectedGoal);
+  const methods = selectedGoal?.savingMethod
+    ?.map((item: { method: any }) => item.method)
+    .join("\n ");
+  // console.log("Methods:", methods); // This will print the methods of goal
+
+  const imageKey = selectedGoal?.goalImage as keyof typeof goalImageMap;
+  const emoji = goalImageMap[imageKey] || "🎯";
+  const [transactions, setTransactions] = useState<GoalTransaction[]>([]);
+
+useFocusEffect(
+  useCallback(() => {
+    const fetchGoalTransactions = async () => {
+      const goalId = selectedGoal?.id;
+      if (!goalId) return;
+
+      const token = await getAuthToken("user");
+      const response = await fetch(`${base_url}/money/all`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ goalId }),
+      });
+
+      const data = await response.json();
+      setTransactions(data.data.data || []);
+    };
+
+    fetchGoalTransactions();
+  }, [selectedGoal?.id])
+);
+
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Ionicons name="close" size={28} />
+        </TouchableOpacity>
+        <Text style={styles.title}>Goal Preview</Text>
+      </View>
+
+      {selectedGoal ? (
+        <>
+          <ScrollView contentContainerStyle={styles.scrollContent}>
+            <View style={styles.goalDetails}>
+              {/* Goal Info */}
+              <View style={styles.goalDetailsCard}>
+                <Text style={styles.goalText}>
+                  {emoji} {selectedGoal.goalName}
+                </Text>
+                <Text>
+                  <Text style={styles.labelText}>Days Left: </Text>
+                  <Text style={styles.valueText}>
+                    {selectedGoal?.daysLeft ?? "-"}
+                  </Text>
+                </Text>
+                <View style={styles.progressBarContainer}>
+                  <View
+                    style={[
+                      styles.progressBar,
+                      {
+                        width: `${selectedGoal.goalAmount
+                            ? Math.min(
+                              ((selectedGoal.savedAmount ?? 0) /
+                                selectedGoal.goalAmount) *
+                              100,
+                              100
+                            )
+                            : 0
+                          }%`,
+                      },
+                    ]}
+                  />
+                </View>
+                <View style={styles.goalDetailsAmount}>
+                  <Text>
+                    <Text style={styles.labelText}>Saved: </Text>
+                    <Text style={styles.valueText}>
+                      £{selectedGoal.savedAmount.toFixed(2)}
+                    </Text>
+                  </Text>
+                  <Text>
+                    <Text style={styles.labelText}>Goal: </Text>
+                    <Text style={styles.valueText}>
+                      £{selectedGoal.goalAmount.toFixed(2)}
+                    </Text>
+                  </Text>
+                </View>
+              </View>
+
+              {/* Saving Methods */}
+              <Text style={styles.transactionTitle}>
+                Selected Saving Methods
+              </Text>
+              {(selectedGoal?.savingMethod as SavingMethod[])?.map(
+                (item, index) => (
+                  <View key={index} style={styles.goalMethodRow}>
+                    <Ionicons
+                      name={methodIcons[item.method] || "help-circle-outline"}
+                      size={18}
+                      color="#3BA365"
+                      style={{ marginRight: 8 }}
+                    />
+                    <Text style={styles.goalMethodText}>{item.method}</Text>
+                  </View>
+                )
+              )}
+
+              {/* Transaction History */}
+              <Text style={styles.transactionTitle}>Saving History</Text>
+              {transactions.length > 0 ? (
+                transactions.map((item, index) => (
+                  <View key={index} style={styles.transactionItem}>
+                    <View style={styles.transactionLeftSide}>
+                      <Text style={styles.transactionText}>{item.title}</Text>
+                      <Text style={styles.labelText}>
+                        {new Date(item.timestamp).toLocaleDateString("en-GB")}
+                      </Text>
+                    </View>
+                    <Text style={styles.transactionAmount}>£{item.amount}</Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.goalText}>No Saving History found.</Text>
+              )}
+            </View>
+          </ScrollView>
+
+          {/* Fixed bottom actions */}
+          <View style={styles.fixedActions}>
+            <View style={styles.buttonRow}>
+              <TouchableOpacity style={styles.outlinedBtn}>
+                <Text>Complete Goal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.outlinedBtn}
+                onPress={() => router.push({
+                  pathname: "/previewGoal/deposit",
+                  params: { id: selectedGoal.id }
+                })}
+
+              >
+                <Text>Deposit</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity
+              style={styles.greenBtn}
+              onPress={() => router.push("/(tabs)/save")}
+            >
+              <Text style={styles.greenBtnText}>Add Savings</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      ) : (
+        <Text style={{ padding: 20 }}>No goal data available.</Text>
+      )}
+    </SafeAreaView>
+  );
+};
+{
+  /* <Text style={styles.labelText}>Time:
+                   {new Date(item.timestamp).toLocaleTimeString("en-GB", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </Text> */
+}
+export default PreviewGoal;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: "white" },
+  safeArea: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 180, // enough space so scroll doesn't hide behind fixed buttons
+  },
+  fixedActions: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "#fff",
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#eee",
+  },
+
   header: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    gap: 15,
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    backgroundColor: "#FFFFFF",
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
   },
-  goalTitle: { fontSize: 22, fontWeight: "bold" },
-  onTrack: { color: "green", marginVertical: 5 },
-  daysLeft: { fontSize: 16, marginBottom: 10 },
-  progressBar: {
-    height: 8,
-    backgroundColor: "#eee",
-    borderRadius: 5,
-    marginVertical: 8,
+  title: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#121417",
   },
-  progressFill: {
-    backgroundColor: "green",
-    height: 8,
-    borderRadius: 5,
+  goalDetails: {
+    padding: 20,
   },
-  sectionTitle: { marginTop: 20, fontWeight: "bold", fontSize: 16 },
-  method: {
+  goalText: {
+    fontSize: 16,
+    color: "#121417",
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+
+  transactionTitle: {
+    fontSize: 16,
+    fontWeight: "500",
+    marginBottom: 10,
+    marginTop: 20,
+  },
+  transactionItem: {
+    marginBottom: 12,
     padding: 10,
-    backgroundColor: "#f2f2f2",
-    borderRadius: 6,
-    marginVertical: 5,
-  },
-  historyItem: {
+    backgroundColor: "#f9f9f9",
+    borderRadius: 8,
     flexDirection: "row",
     justifyContent: "space-between",
-    marginVertical: 4,
+  },
+  transactionText: {
+    fontSize: 14,
+    color: "#121417",
+    fontWeight: "500",
+  },
+  goalDetailsCard: {
+    backgroundColor: "#fff",
+    height: 130,
+    borderRadius: 8,
+    justifyContent: "space-between",
+    padding: 10,
+  },
+  goalDetailsAmount: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  labelText: {
+    fontSize: 14,
+    color: "#637587",
+    fontWeight: "400",
+    fontStyle: "normal",
+  },
+  valueText: {
+    fontSize: 14,
+    color: "#121417",
+    fontWeight: "400",
+    fontStyle: "normal",
+  },
+  progressBarContainer: {
+    width: "100%",
+    height: hp(1),
+    backgroundColor: "#CDFFDF",
+    borderRadius: wp(1),
+    overflow: "hidden",
+  },
+  progressBar: {
+    height: "100%",
+    borderRadius: wp(1),
+    backgroundColor: "#3BA365",
+  },
+  goalMethodContainer: {
+    marginTop: 15,
+  },
+  goalMethod: {
+    height: 50,
+    backgroundColor: "#fff",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  transactionLeftSide: {
+    gap: 5,
+  },
+  transactionAmount: {
+    fontSize: 16,
+    color: "#3BA365",
+    fontWeight: "600",
+    fontStyle: "normal",
+  },
+  goalMethodRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    padding: 10,
+    marginBottom: 8,
+    borderRadius: 6,
+  },
+  goalMethodText: {
+    fontSize: 14,
+    color: "#121417",
+    fontWeight: "500",
   },
   buttonRow: {
     flexDirection: "row",
@@ -240,41 +381,4 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   greenBtnText: { color: "white", fontWeight: "bold" },
-  optionBox: {
-    position: "absolute",
-    right: 10,
-    top: 40,
-    backgroundColor: "white",
-    padding: 10,
-    elevation: 5,
-    borderRadius: 4,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalBox: {
-    backgroundColor: "white",
-    padding: 20,
-    borderRadius: 8,
-    width: "80%",
-  },
-  modalButtons: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 20,
-  },
-  cancelBtn: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    padding: 10,
-    borderRadius: 6,
-  },
-  deleteBtn: {
-    backgroundColor: "green",
-    padding: 10,
-    borderRadius: 6,
-  },
 });

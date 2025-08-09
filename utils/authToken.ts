@@ -12,7 +12,7 @@ export const saveAuthToken = async (token: string) => {
   }
 };
 
-export const getAuthToken = async (): Promise<string | null> => {
+export const getAuthToken = async (p0: string): Promise<string | null> => {
   try {
     const token = await AsyncStorage.getItem(TOKEN_KEY);
     console.log('📝 Retrieved token:', token);

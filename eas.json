@@ -15,6 +15,7 @@
         "buildType": "apk"
       },
       "ios": {
+          "autoIncrement": true,
         "simulator": false
       }
     },
@@ -24,6 +25,7 @@
         "buildType": "app-bundle"
       },
       "ios": {
+          "autoIncrement": true,
         "simulator": false
       }
     }

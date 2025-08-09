@@ -1,20 +1,23 @@
-import React, { useCallback, useEffect, useState } from "react";
-import * as WebBrowser from "expo-web-browser";
-import * as AuthSession from "expo-auth-session";
+import { base_url } from "@/config/url";
+import { getAuthToken, saveAuthToken } from "@/utils/authToken";
 import { useAuth, useSSO, useUser } from "@clerk/clerk-expo";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as AuthSession from "expo-auth-session";
+import * as Notifications from 'expo-notifications';
+import { useRouter } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
+import React, { useCallback, useEffect, useState } from "react";
 import {
-  View,
-  StyleSheet,
-  TouchableOpacity,
-  Text,
-  Image,
-  useWindowDimensions,
   ActivityIndicator,
+  Image,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
-import { base_url } from "@/config/url";
-import { saveAuthToken, getAuthToken } from "@/utils/authToken";
 import Toast from "react-native-toast-message";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -32,6 +35,8 @@ export default function Page() {
   const router = useRouter();
   const { width } = useWindowDimensions();
 
+
+
   useWarmUpBrowser();
 
   const { startSSOFlow } = useSSO();
@@ -39,12 +44,22 @@ export default function Page() {
   const { user } = useUser();
 
   const [isLoading, setIsLoading] = useState(false);
-  const [loadingStrategy, setLoadingStrategy] = useState<null | "oauth_google" | "oauth_apple">(null);
+  const [loadingStrategy, setLoadingStrategy] = useState<
+    null | "oauth_google" | "oauth_apple" | "oauth_microsoft"
+  >(null);
   const [showContent, setShowContent] = useState(false); // <-- control rendering
 
+  useEffect(() => {
+    if (isSignedIn) {
+      router.replace("/(tabs)");
+    }
+  }, [isSignedIn]);
+
+
   const handleLogin = useCallback(
-    async (strategy: "oauth_google" | "oauth_apple") => {
-      if (isLoading || isSignedIn) return; // <-- prevent login if already signed in
+    async (strategy: "oauth_google" | "oauth_apple" | "oauth_microsoft") => {
+      if (isLoading) return;
+
       try {
         setIsLoading(true);
         setLoadingStrategy(strategy);
@@ -66,7 +81,7 @@ export default function Page() {
         Toast.show({
           type: "error",
           text1: "SSO Error",
-          text2: err?.toString()||"Something went wrong during sign-in.",
+          text2: "Something went wrong during sign-in.",
         });
       } finally {
         setIsLoading(false);
@@ -76,17 +91,20 @@ export default function Page() {
     [startSSOFlow, isLoading]
   );
 
+
+
   useEffect(() => {
     const checkAuthAndSignIn = async () => {
-      const existingToken = await getAuthToken();
+      const existingToken = await getAuthToken("");
 
       if (existingToken) {
         // Token exists → redirect immediately
         Toast.show({
           type: "success",
-          text1: "Already Signed In",
-          text2: "Redirecting...",
+          text1: `Welcome Back! ${user?.fullName || "User"}`,
+          visibilityTime: 1000,
         });
+
         router.replace("/(tabs)");
         return;
       }
@@ -98,6 +116,31 @@ export default function Page() {
       }
 
       try {
+        let deviceToken = "";
+
+        // 1. Check & request notification permission
+        const { status } = await Notifications.getPermissionsAsync();
+        let finalStatus = status;
+
+        if (status !== "granted") {
+          const { status: newStatus } = await Notifications.requestPermissionsAsync();
+          finalStatus = newStatus;
+        }
+
+        // 2. Get token only if granted
+        if (finalStatus === "granted") {
+          const { data: currentToken } = await Notifications.getExpoPushTokenAsync();
+          if (currentToken) {
+            deviceToken = currentToken;
+            await AsyncStorage.setItem("deviceToken", currentToken);
+          } else {
+            console.log("⚠ No device token retrieved");
+          }
+        } else {
+          console.log("❌ Notifications permission denied — continuing without token");
+        }
+
+        // 3. Hit the API regardless of token
         const response = await fetch(`${base_url}/signin/user`, {
           method: "POST",
           headers: {
@@ -107,6 +150,7 @@ export default function Page() {
             fullName: user.fullName,
             email: user.emailAddresses[0].emailAddress,
             imageUrl: user.imageUrl,
+            deviceToken: deviceToken, // empty if not granted
             providerInfo: {
               providerName: user.externalAccounts?.[0]?.provider,
               providerId: userId,
@@ -115,18 +159,33 @@ export default function Page() {
         });
 
         const data = await response.json();
+        console.log("Backend response:", data, response.status);
+
+        const type = data?.data?.type;
         const token = data?.data?.token;
 
-        if (response.status === 201 && token) {
+        if (response.status === 201 && token && type === "login") {
           await saveAuthToken(token);
-
           Toast.show({
             type: "success",
             text1: "Login Successful",
-            text2: "Redirecting...",
+            visibilityTime: 1000,
           });
-
+          router.replace("/(tabs)");
+        } else if (response.status === 201 && token && type === "signup") {
+          await saveAuthToken(token);
+          Toast.show({
+            type: "success",
+            text1: "Login Successful",
+            visibilityTime: 1000,
+          });
           router.replace("/signup/signUp");
+        } else if (response.status === 201 && !token) {
+          Toast.show({
+            type: "error",
+            text1: "Please SignUp First",
+            text2: data?.message,
+          });
         } else {
           Toast.show({
             type: "error",
@@ -139,11 +198,10 @@ export default function Page() {
         Toast.show({
           type: "error",
           text1: "Server Error",
-          text2: error?.toString() || "Could not connect to server.",
+          text2: "Could not connect to server.",
         });
-      } finally {
-        setShowContent(true); // Show login UI if user not redirected
       }
+
     };
 
     checkAuthAndSignIn();
@@ -163,13 +221,16 @@ export default function Page() {
         <View style={[styles.container, { paddingHorizontal: width * 0.08 }]}>
           <View style={styles.textWrapper}>
             <Text style={styles.welcomeText}>Welcome Back</Text>
-            <Text style={styles.title}>GoodBreach</Text>
+            <Text style={styles.title}>BuckUp</Text>
             <Text style={styles.subText}>Small Sacrifices, Big Rewards</Text>
           </View>
 
           <Image
             source={require("@/assets/images/logn_image.png")}
-            style={[styles.loginImage, { width: width * 0.8, height: width * 0.8 }]}
+            style={[
+              styles.loginImage,
+              { width: width * 0.8, height: width * 0.8 },
+            ]}
             resizeMode="contain"
           />
 
@@ -196,30 +257,54 @@ export default function Page() {
                 : "Continue with Google"}
             </Text>
           </TouchableOpacity>
-
-          {/* Apple Button */}
+          {/* Microsoft Button */}
           <TouchableOpacity
             style={[
               styles.button,
               {
                 backgroundColor:
-                  loadingStrategy === "oauth_apple" ? "#A1E6B4" : "#004110",
+                  loadingStrategy === "oauth_microsoft" ? "#A1E6B4" : "#004110",
                 width: width * 0.85,
               },
             ]}
-            onPress={() => handleLogin("oauth_apple")}
+            onPress={() => handleLogin("oauth_microsoft")}
             disabled={isLoading}
           >
             <Image
-              source={require("@/assets/images/logo_apple.png")}
+              source={require("@/assets/images/logo_google.png")}
               style={styles.logo}
             />
             <Text style={styles.buttonText}>
-              {loadingStrategy === "oauth_apple"
+              {loadingStrategy === "oauth_microsoft"
                 ? "Signing in..."
-                : "Continue with Apple"}
+                : "Continue with Microsoft"}
             </Text>
           </TouchableOpacity>
+          {/* Apple Button */}
+          {Platform.OS === "ios" && (
+            <TouchableOpacity
+              style={[
+                styles.button,
+                {
+                  backgroundColor:
+                    loadingStrategy === "oauth_apple" ? "#A1E6B4" : "#004110",
+                  width: width * 0.85,
+                },
+              ]}
+              onPress={() => handleLogin("oauth_apple")}
+              disabled={isLoading}
+            >
+              <Image
+                source={require("@/assets/images/logo_apple.png")}
+                style={styles.logo}
+              />
+              <Text style={styles.buttonText}>
+                {loadingStrategy === "oauth_apple"
+                  ? "Signing in..."
+                  : "Continue with Apple"}
+              </Text>
+            </TouchableOpacity>
+          )}
 
           <Text style={styles.endText}>
             By continuing, you agree to our Privacy and Terms.
