@@ -1,90 +1,105 @@
+import { ActiveGoalsList } from "@/components/ActiveGoals/ActiveGoalList";
+import { base_url } from "@/config/url";
+import { useNotification } from "@/context/NotificationContext";
+import { getAuthToken } from "@/utils/authToken";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { useIsFocused } from "@react-navigation/native";
+import axios from "axios";
+import Constants from "expo-constants";
+import * as Notifications from "expo-notifications";
+import { useRouter } from "expo-router";
+import * as Updates from "expo-updates";
+import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  FlatList,
+  Image,
   StyleSheet,
   Text,
-  View,
   TouchableOpacity,
-  Image,
-  Dimensions,
-  ActivityIndicator,
-  FlatList,
-  Platform,
-  Alert,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import React, { useState, useEffect } from "react";
-import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { useRouter } from "expo-router";
-import { getAuthToken } from "@/utils/authToken";
-import { base_url } from "@/config/url";
-import { useIsFocused } from "@react-navigation/native";
-import { ActiveGoalsList } from "@/components/ActiveGoals/ActiveGoalList";
-import * as Notifications from "expo-notifications";
-import Constants from "expo-constants";
-import axios from "axios";
-import { useNotification } from "@/context/NotificationContext";
-import * as Updates from "expo-updates";
-
 
 const { width, height } = Dimensions.get("window");
 const wp = (percentage: any) => (width * percentage) / 100;
 const hp = (percentage: any) => (height * percentage) / 100;
 
 export default function Index() {
-  const [prevPermissionStatus, setPrevPermissionStatus] = useState<string | null>(null);
+  const [prevPermissionStatus, setPrevPermissionStatus] = useState<
+    string | null
+  >(null);
 
   const { notification, expoPushToken, error } = useNotification();
   const { currentlyRunning, isUpdateAvailable, isUpdatePending } =
     Updates.useUpdates();
-//  if(expoPushToken)Alert.alert("notification");
-//  if(error) Alert.alert("error");
-
+  //  if(expoPushToken)Alert.alert("notification");
+  //  if(error) Alert.alert("error");
 
   // if (error) {
   //   return <View>Error: {error.message}</View>;
   // }
 
-useEffect(() => {
-  const updateDeviceTokenIfPermissionChanged = async () => {
-    try {
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+  useEffect(() => {
+    const updateDeviceTokenIfPermissionChanged = async () => {
+      try {
+        const { status: existingStatus } =
+          await Notifications.getPermissionsAsync();
 
-      // Only run if first check OR status changed
-      if (prevPermissionStatus === null || prevPermissionStatus !== existingStatus) {
-        setPrevPermissionStatus(existingStatus);
+        // Only run if first check OR status changed
+        if (
+          prevPermissionStatus === null ||
+          prevPermissionStatus !== existingStatus
+        ) {
+          setPrevPermissionStatus(existingStatus);
 
-        // Only send token if granted & token exists
-        if (existingStatus === "granted" && expoPushToken) {
+          // Only send token if granted & token exists
           const token = await getAuthToken("user");
           if (!token) {
             console.warn("No auth token found");
             return;
           }
 
-          const deviceToken = expoPushToken; 
+          let deviceToken = "null";
+
+          if (existingStatus === "granted" && expoPushToken) {
+            deviceToken = expoPushToken;
+          } else {
+            console.log("🚫 Notifications permission not granted");
+          }
+
           const formData = new FormData();
           formData.append("deviceToken", deviceToken);
-          const response = await axios.patch(`${base_url}/create/user`, formData, {
-            headers: {
-              "Content-Type": "multipart/form-data",
-              Authorization: `Bearer ${token}`,
-            },
-          });
 
-          if (response) {
-            console.log("✅ Device token updated:", deviceToken);
-            console.log("resoponse",response)
+          try {
+            const response = await axios.patch(
+              `${base_url}/create/user`,
+              formData,
+              {
+                headers: {
+                  "Content-Type": "multipart/form-data",
+                  Authorization: `Bearer ${token}`,
+                },
+              }
+            );
+
+            if (response) {
+              console.log("✅ Device token updated:", deviceToken);
+              console.log("response", response);
+            }
+          } catch (error) {
+            console.error("❌ Failed to update device token:", error);
           }
-        } else {
-          console.log("🚫 Notifications permission not granted");
         }
+      } catch (err) {
+        console.error("Error updating device token:", err);
       }
-    } catch (err) {
-      console.error("Error updating device token:", err);
-    }
-  };
-  updateDeviceTokenIfPermissionChanged();
-}, [expoPushToken, prevPermissionStatus]);
-  
+    };
+    updateDeviceTokenIfPermissionChanged();
+  }, [expoPushToken, prevPermissionStatus]);
+
   useEffect(() => {
     if (isUpdatePending) {
       dummyFunction();
@@ -119,7 +134,6 @@ useEffect(() => {
       try {
         const token = await getAuthToken("user");
 
-
         let deviceToken = "";
 
         const { status: existingStatus } =
@@ -147,12 +161,16 @@ useEffect(() => {
         // formData.append("preferences[pushNotification]", true);
         formData.append("deviceToken", deviceToken);
 
-        const response = await axios.patch(`${base_url}/api/create/user`, formData, {
-          headers: {
-            "Content-Type": "multipart/form-data",
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        const response = await axios.patch(
+          `${base_url}/api/create/user`,
+          formData,
+          {
+            headers: {
+              "Content-Type": "multipart/form-data",
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
         if (response) {
           // console.log(response)
         }
@@ -333,7 +351,6 @@ useEffect(() => {
     </SafeAreaView>
   );
 }
-
 
 const styles = StyleSheet.create({
   safeContainer: {
