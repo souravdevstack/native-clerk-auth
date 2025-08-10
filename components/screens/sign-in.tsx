@@ -1,23 +1,21 @@
-import { base_url } from "@/config/url";
-import { getAuthToken, saveAuthToken } from "@/utils/authToken";
-import { useAuth, useSSO, useUser } from "@clerk/clerk-expo";
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as AuthSession from "expo-auth-session";
-import * as Notifications from 'expo-notifications';
-import { useRouter } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
 import React, { useCallback, useEffect, useState } from "react";
+import * as WebBrowser from "expo-web-browser";
+import * as AuthSession from "expo-auth-session";
+import { useAuth, useSSO, useUser } from "@clerk/clerk-expo";
 import {
-  ActivityIndicator,
-  Image,
-  Platform,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  useWindowDimensions,
   View,
+  StyleSheet,
+  TouchableOpacity,
+  Text,
+  Image,
+  useWindowDimensions,
+  ActivityIndicator,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
+import { base_url } from "@/config/url";
+import { saveAuthToken, getAuthToken } from "@/utils/authToken";
 import Toast from "react-native-toast-message";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -35,8 +33,6 @@ export default function Page() {
   const router = useRouter();
   const { width } = useWindowDimensions();
 
-
-
   useWarmUpBrowser();
 
   const { startSSOFlow } = useSSO();
@@ -45,16 +41,9 @@ export default function Page() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStrategy, setLoadingStrategy] = useState<
-    null | "oauth_google" | "oauth_apple" | "oauth_microsoft"
+    null | "oauth_google" | "oauth_apple"| "oauth_microsoft"
   >(null);
   const [showContent, setShowContent] = useState(false); // <-- control rendering
-
-  useEffect(() => {
-    if (isSignedIn) {
-      router.replace("/(tabs)");
-    }
-  }, [isSignedIn]);
-
 
   const handleLogin = useCallback(
     async (strategy: "oauth_google" | "oauth_apple" | "oauth_microsoft") => {
@@ -91,11 +80,9 @@ export default function Page() {
     [startSSOFlow, isLoading]
   );
 
-
-
   useEffect(() => {
     const checkAuthAndSignIn = async () => {
-      const existingToken = await getAuthToken("");
+      const existingToken = await getAuthToken("user");
 
       if (existingToken) {
         // Token exists → redirect immediately
@@ -116,31 +103,6 @@ export default function Page() {
       }
 
       try {
-        let deviceToken = "";
-
-        // 1. Check & request notification permission
-        const { status } = await Notifications.getPermissionsAsync();
-        let finalStatus = status;
-
-        if (status !== "granted") {
-          const { status: newStatus } = await Notifications.requestPermissionsAsync();
-          finalStatus = newStatus;
-        }
-
-        // 2. Get token only if granted
-        if (finalStatus === "granted") {
-          const { data: currentToken } = await Notifications.getExpoPushTokenAsync();
-          if (currentToken) {
-            deviceToken = currentToken;
-            await AsyncStorage.setItem("deviceToken", currentToken);
-          } else {
-            console.log("⚠ No device token retrieved");
-          }
-        } else {
-          console.log("❌ Notifications permission denied — continuing without token");
-        }
-
-        // 3. Hit the API regardless of token
         const response = await fetch(`${base_url}/signin/user`, {
           method: "POST",
           headers: {
@@ -150,7 +112,6 @@ export default function Page() {
             fullName: user.fullName,
             email: user.emailAddresses[0].emailAddress,
             imageUrl: user.imageUrl,
-            deviceToken: deviceToken, // empty if not granted
             providerInfo: {
               providerName: user.externalAccounts?.[0]?.provider,
               providerId: userId,
@@ -160,25 +121,32 @@ export default function Page() {
 
         const data = await response.json();
         console.log("Backend response:", data, response.status);
-
+        // console.log("login status--",data.data.type)
         const type = data?.data?.type;
         const token = data?.data?.token;
 
+        //for checking if login type is login
         if (response.status === 201 && token && type === "login") {
           await saveAuthToken(token);
+
           Toast.show({
             type: "success",
             text1: "Login Successful",
             visibilityTime: 1000,
           });
+
           router.replace("/(tabs)");
-        } else if (response.status === 201 && token && type === "signup") {
+        }
+        // for type = signUp
+        else if (response.status === 201 && token && type === "signup") {
           await saveAuthToken(token);
+
           Toast.show({
             type: "success",
             text1: "Login Successful",
             visibilityTime: 1000,
           });
+
           router.replace("/signup/signUp");
         } else if (response.status === 201 && !token) {
           Toast.show({
@@ -200,8 +168,9 @@ export default function Page() {
           text1: "Server Error",
           text2: "Could not connect to server.",
         });
+      } finally {
+        setShowContent(true); // Show login UI if user not redirected
       }
-
     };
 
     checkAuthAndSignIn();
@@ -257,8 +226,8 @@ export default function Page() {
                 : "Continue with Google"}
             </Text>
           </TouchableOpacity>
-          {/* Microsoft Button */}
-          <TouchableOpacity
+{/* Microsoft Button */}
+ <TouchableOpacity
             style={[
               styles.button,
               {

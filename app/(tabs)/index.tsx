@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   FlatList,
   Platform,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import React, { useState, useEffect } from "react";
@@ -20,12 +21,58 @@ import { ActiveGoalsList } from "@/components/ActiveGoals/ActiveGoalList";
 import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
 import axios from "axios";
+import { useNotification } from "@/context/NotificationContext";
+import * as Updates from "expo-updates";
+
 
 const { width, height } = Dimensions.get("window");
 const wp = (percentage: any) => (width * percentage) / 100;
 const hp = (percentage: any) => (height * percentage) / 100;
 
 export default function Index() {
+  const { notification, expoPushToken, error } = useNotification();
+  const { currentlyRunning, isUpdateAvailable, isUpdatePending } =
+    Updates.useUpdates();
+
+  const [dummyState, setDummyState] = useState(0);
+
+  if (error) {
+    return <View>Error: {error.message}</View>;
+  }
+
+  useEffect(() => {
+    if (isUpdatePending) {
+      // Update has successfully downloaded; apply it now
+      // Updates.reloadAsync();
+      // setDummyState(dummyState + 1);
+      // Alert.alert("Update downloaded and applied");
+
+      dummyFunction();
+    }
+  }, [isUpdatePending]);
+
+  const dummyFunction = async () => {
+    try {
+      await Updates.reloadAsync();
+    } catch (e) {
+      Alert.alert("Error");
+    }
+
+    // UNCOMMENT TO REPRODUCE EAS UPDATE ERROR
+    // } finally {
+    //   setDummyState(dummyState + 1);
+    //   console.log("dummyFunction");
+    // }
+  };
+
+  // If true, we show the button to download and run the update
+  const showDownloadButton = isUpdateAvailable;
+
+  // Show whether or not we are running embedded code or an update
+  const runTypeMessage = currentlyRunning.isEmbeddedLaunch
+    ? "This app is running from built-in code"
+    : "This app is running an update";
+
   const router = useRouter();
   const [goals, setGoals] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -37,10 +84,7 @@ export default function Index() {
     const registerForPushNotifications = async () => {
       try {
         const token = await getAuthToken("user");
-        if (!token) {
-          console.warn("User not logged in, skipping device token update");
-          return;
-        }
+
 
         let deviceToken = "";
 

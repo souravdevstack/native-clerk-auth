@@ -7,6 +7,17 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { DrawerContentScrollView, DrawerItem } from "@react-navigation/drawer";
 import { Text, TouchableOpacity, StyleSheet } from "react-native";
 import { router } from "expo-router";
+import { NotificationProvider } from "@/context/NotificationContext";
+import * as Notifications from 'expo-notifications';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 function CustomDrawerContent(props: any) {
   return (
@@ -56,6 +67,7 @@ export default function RootLayout() {
     Constants.expoConfig?.extra?.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
   return (
+    <NotificationProvider>
     <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
       <Drawer
   screenOptions={{ headerShown: false }} // ✅ hides the drawer header globally
@@ -135,6 +147,7 @@ export default function RootLayout() {
       </Drawer>
       <Toast />
     </ClerkProvider>
+    </NotificationProvider>
   );
 }
 const styles = StyleSheet.create({
