@@ -17,6 +17,7 @@ import { useRouter } from "expo-router";
 import { base_url } from "@/config/url";
 import { saveAuthToken, getAuthToken } from "@/utils/authToken";
 import Toast from "react-native-toast-message";
+import { useNotification } from "@/context/NotificationContext";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -30,6 +31,9 @@ export const useWarmUpBrowser = () => {
 };
 
 export default function Page() {
+
+
+
   const router = useRouter();
   const { width } = useWindowDimensions();
 
@@ -41,7 +45,7 @@ export default function Page() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStrategy, setLoadingStrategy] = useState<
-    null | "oauth_google" | "oauth_apple"| "oauth_microsoft"
+    null | "oauth_google" | "oauth_apple" | "oauth_microsoft"
   >(null);
   const [showContent, setShowContent] = useState(false); // <-- control rendering
 
@@ -80,12 +84,13 @@ export default function Page() {
     [startSSOFlow, isLoading]
   );
 
+  const { expoPushToken } = useNotification();
+  let devicetoken = expoPushToken;
+  if (!expoPushToken) { devicetoken = "null" }
   useEffect(() => {
     const checkAuthAndSignIn = async () => {
       const existingToken = await getAuthToken("user");
-
       if (existingToken) {
-        // Token exists → redirect immediately
         Toast.show({
           type: "success",
           text1: `Welcome Back! ${user?.fullName || "User"}`,
@@ -116,6 +121,7 @@ export default function Page() {
               providerName: user.externalAccounts?.[0]?.provider,
               providerId: userId,
             },
+            deviceToken: devicetoken,
           }),
         });
 
@@ -226,8 +232,8 @@ export default function Page() {
                 : "Continue with Google"}
             </Text>
           </TouchableOpacity>
-{/* Microsoft Button */}
- <TouchableOpacity
+          {/* Microsoft Button */}
+          <TouchableOpacity
             style={[
               styles.button,
               {

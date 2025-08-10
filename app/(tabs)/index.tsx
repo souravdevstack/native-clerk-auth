@@ -30,23 +30,63 @@ const wp = (percentage: any) => (width * percentage) / 100;
 const hp = (percentage: any) => (height * percentage) / 100;
 
 export default function Index() {
+  const [prevPermissionStatus, setPrevPermissionStatus] = useState<string | null>(null);
+
   const { notification, expoPushToken, error } = useNotification();
   const { currentlyRunning, isUpdateAvailable, isUpdatePending } =
     Updates.useUpdates();
+//  if(expoPushToken)Alert.alert("notification");
+//  if(error) Alert.alert("error");
 
-  const [dummyState, setDummyState] = useState(0);
 
-  if (error) {
-    return <View>Error: {error.message}</View>;
-  }
+  // if (error) {
+  //   return <View>Error: {error.message}</View>;
+  // }
 
+useEffect(() => {
+  const updateDeviceTokenIfPermissionChanged = async () => {
+    try {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+
+      // Only run if first check OR status changed
+      if (prevPermissionStatus === null || prevPermissionStatus !== existingStatus) {
+        setPrevPermissionStatus(existingStatus);
+
+        // Only send token if granted & token exists
+        if (existingStatus === "granted" && expoPushToken) {
+          const token = await getAuthToken("user");
+          if (!token) {
+            console.warn("No auth token found");
+            return;
+          }
+
+          const deviceToken = expoPushToken; 
+          const formData = new FormData();
+          formData.append("deviceToken", deviceToken);
+          const response = await axios.patch(`${base_url}/create/user`, formData, {
+            headers: {
+              "Content-Type": "multipart/form-data",
+              Authorization: `Bearer ${token}`,
+            },
+          });
+
+          if (response) {
+            console.log("✅ Device token updated:", deviceToken);
+            console.log("resoponse",response)
+          }
+        } else {
+          console.log("🚫 Notifications permission not granted");
+        }
+      }
+    } catch (err) {
+      console.error("Error updating device token:", err);
+    }
+  };
+  updateDeviceTokenIfPermissionChanged();
+}, [expoPushToken, prevPermissionStatus]);
+  
   useEffect(() => {
     if (isUpdatePending) {
-      // Update has successfully downloaded; apply it now
-      // Updates.reloadAsync();
-      // setDummyState(dummyState + 1);
-      // Alert.alert("Update downloaded and applied");
-
       dummyFunction();
     }
   }, [isUpdatePending]);
@@ -57,12 +97,6 @@ export default function Index() {
     } catch (e) {
       Alert.alert("Error");
     }
-
-    // UNCOMMENT TO REPRODUCE EAS UPDATE ERROR
-    // } finally {
-    //   setDummyState(dummyState + 1);
-    //   console.log("dummyFunction");
-    // }
   };
 
   // If true, we show the button to download and run the update
@@ -120,11 +154,11 @@ export default function Index() {
           },
         });
         if (response) {
-          console.log(response)
+          // console.log(response)
         }
         console.log("Device token updated:", deviceToken || "empty");
       } catch (err) {
-        console.error("Error updating device token:", err);
+        // console.error("Error updating device token:", err);
       }
     };
 

@@ -24,7 +24,7 @@ const App: React.FC = () => {
       setOnboardingCompleted(completed);
       setIsLoading(false);
     } catch (error) {
-      console.error('Error checking onboarding status:', error);
+      // console.error('Error checking onboarding status:', error);
       setIsLoading(false);
     }
   };
